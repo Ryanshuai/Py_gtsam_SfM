@@ -18,6 +18,8 @@ def estimate_fundamental_matrix_ransac(pts1, pts2, threshold=1.0, iterations=100
             best_inliers = inliers
 
     # Refine using all inliers (n > 8)
+
+    # TODO： replace by LM optimization
     F_final = estimate_fundamental_matrix_8point(pts1[best_inliers], pts2[best_inliers])
 
     return F_final, best_inliers
@@ -57,10 +59,10 @@ def estimate_fundamental_matrix_8point(pts1, pts2):
     pts2_norm, T2 = normalize_points(pts2)
 
     # 2. Build A matrix (Nx9)
-    A = build_A_matrix(pts1_norm, pts2_norm)
+    A = build_design_matrix(pts1_norm, pts2_norm)
 
     # 3. Solve for F using SVD (last column of V)
-    F = solve_F_from_A(A)
+    F = solve_F_from_design_metrix(A)
 
     # 4. Enforce rank-2 constraint
     F = enforce_rank2(F)
@@ -87,15 +89,15 @@ def normalize_points(pts):
     return pts_normalized, T
 
 
-def build_A_matrix(pts1, pts2):
+def build_design_matrix(pts1, pts2):
     """
     Build A matrix for 8-point algorithm
 
     Derived from epipolar constraint:
-        x2^T * F * x1 = 0
+        x2^T @ F @ x1 = 0
 
     Expanding matrix multiplication:
-        [x2, y2, 1] * [f11 f12 f13] * [x1]
+        [x2, y2, 1] @ [f11 f12 f13] @ [x1]
                       [f21 f22 f23]   [y1]
                       [f31 f32 f33]   [1 ]
 
@@ -118,7 +120,7 @@ def build_A_matrix(pts1, pts2):
     return A
 
 
-def solve_F_from_A(A):
+def solve_F_from_design_metrix(A):
     """
     Math: Last column of V minimizes ||Af|| (least-squares solution to Af = 0)
     """
