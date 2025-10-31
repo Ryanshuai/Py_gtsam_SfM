@@ -1,6 +1,46 @@
 import numpy as np
 
 
+def estimate_fundamental_matrix_ransac(pts1, pts2, threshold=1.0, iterations=1000):
+    best_inliers = []
+
+    for _ in range(iterations):
+        # Randomly sample 8 points
+        idx = np.random.choice(len(pts1), 8, replace=False)
+
+        # Estimate F from 8 points
+        F = estimate_fundamental_matrix_8point(pts1[idx], pts2[idx])
+
+        # Test on all N points
+        inliers = compute_inliers(F, pts1, pts2, threshold)
+
+        if len(inliers) > len(best_inliers):
+            best_inliers = inliers
+
+    # Refine using all inliers (n > 8)
+    F_final = estimate_fundamental_matrix_8point(pts1[best_inliers], pts2[best_inliers])
+
+    return F_final, best_inliers
+
+
+def compute_inliers(F, pts1, pts2, threshold):
+    """
+    Sampson distance: d = (x2^T F x1)^2 / (||Fx1||^2 + ||F^T x2||^2)
+    """
+    pts1_h = np.hstack((pts1, np.ones((pts1.shape[0], 1))))
+    pts2_h = np.hstack((pts2, np.ones((pts2.shape[0], 1))))
+
+    lines2 = (F @ pts1_h.T).T  # Nx3
+    lines1 = (F.T @ pts2_h.T).T  # Nx3
+
+    numerator = np.sum(pts2_h * lines2, axis=1) ** 2  #
+    denominator = np.sum(lines2[:, :2] ** 2, axis=1) + np.sum(lines1[:, :2] ** 2, axis=1)
+    dists = numerator / denominator
+
+    inliers = np.where(dists < threshold ** 2)[0]
+    return inliers
+
+
 def estimate_fundamental_matrix_8point(pts1, pts2):
     """
     Eight-point algorithm to estimate fundamental matrix F
@@ -92,6 +132,3 @@ def enforce_rank2(F):
     S[2] = 0  # Set smallest singular value to zero
     F_rank2 = U @ np.diag(S) @ Vt
     return F_rank2
-
-
-
