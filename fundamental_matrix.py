@@ -91,8 +91,6 @@ def normalize_points(pts):
 
 def build_design_matrix(pts1, pts2):
     """
-    Build A matrix for 8-point algorithm
-
     Derived from epipolar constraint:
         x2^T @ F @ x1 = 0
 

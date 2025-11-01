@@ -78,8 +78,6 @@ def estimate_extrinsic_pnp_dlt(pts3D, pts2D, K):
 
 def build_design_matrix_pnp(pts3D, pts2D_norm):
     """
-    Build matrix A for linear PnP (DLT formulation).
-
     ----------------------------------------------
     Step 1. Projection equation (normalized form)
         s @ [x, y, 1]^T = P @ [X, Y, Z, 1]^T
