@@ -72,8 +72,8 @@ def estimate_extrinsic_pnp_dlt(pts3D, pts2D, K):
     Rt = solve_Rt_from_design_metrix(A)
 
     # 4) Enforce R ∈ SO(3) and normalize t
-    P = enforce_so3(P)
-    return P
+    Rt = enforce_so3(Rt)
+    return Rt
 
 
 def build_design_matrix_pnp(pts3D, pts2D_norm):
