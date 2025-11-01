@@ -1,7 +1,7 @@
 import numpy as np
 
 
-def estimate_fundamental_matrix_ransac(pts3D, pts2D, K, threshold=1.0, iterations=1000):
+def estimate_extrinsic_pnp_ransac(pts3D, pts2D, K, threshold=1.0, iterations=1000):
     best_inliers = []
 
     for _ in range(iterations):
@@ -10,23 +10,42 @@ def estimate_fundamental_matrix_ransac(pts3D, pts2D, K, threshold=1.0, iteration
 
         # Estimate F from 6 points
         try:
-            R, t = estimate_pose_pnp_dlt(pts3D[idx], pts2D[idx], K)
+            Rt = estimate_extrinsic_pnp_dlt(pts3D[idx], pts2D[idx], K)
         except np.linalg.LinAlgError:
             continue
 
         # Test on all N points
-        inliers = compute_inliers(F, pts1, pts2, threshold)
+        inliers = compute_inliers(Rt, pts3D, pts2D, K, threshold)
 
         if len(inliers) > len(best_inliers):
             best_inliers = inliers
 
     # Refine using all inliers (n > 8)
-    F_final = estimate_fundamental_matrix_8point(pts1[best_inliers], pts2[best_inliers])
+    # TODO： replace by LM optimization
+    Rt_final = estimate_extrinsic_pnp_dlt(pts3D[best_inliers], pts2D[best_inliers], K)
 
-    return F_final, best_inliers
+    return Rt_final, best_inliers
 
 
-def estimate_pose_pnp_dlt(pts3D, pts2D, K):
+def compute_inliers(Rt, pts3D, pts2D, K, threshold=1.0):
+    """
+    Projection: P = K @ [R|t]
+    Error = || p_2D - K @ [R|t] @ P_3D || < threshold
+    """
+    pts3D_h = np.hstack([pts3D, np.ones((pts3D.shape[0], 1))])  # (N, 4)
+
+    # project 3D points to 2D
+    pts2D_proj_h = (K @ Rt @ pts3D_h.T).T  # (N, 3)
+    pts2D_proj = pts2D_proj_h[:, :2] / pts2D_proj_h[:, 2:3]  # normalize
+
+    # compute reprojection errors
+    errors = np.linalg.norm(pts2D - pts2D_proj, axis=1)
+    inliers = np.where(errors < threshold)[0]
+
+    return inliers
+
+
+def estimate_extrinsic_pnp_dlt(pts3D, pts2D, K):
     """
     Linear PnP (DLT) algorithm to estimate camera pose [R | t].
 
@@ -50,11 +69,11 @@ def estimate_pose_pnp_dlt(pts3D, pts2D, K):
     A = build_design_matrix_pnp(pts3D, pts2D_norm_h[:, :2])
 
     # 3) solve R,t from A using SVD
-    R, t = solve_F_from_design_metrix(A)
+    Rt = solve_Rt_from_design_metrix(A)
 
     # 4) Enforce R ∈ SO(3) and normalize t
-    R, t = enforce_so3(R, t)
-    return R, t
+    P = enforce_so3(P)
+    return P
 
 
 def build_design_matrix_pnp(pts3D, pts2D_norm):
@@ -104,18 +123,20 @@ def build_design_matrix_pnp(pts3D, pts2D_norm):
     return A
 
 
-def solve_F_from_design_metrix(A):
+def solve_Rt_from_design_metrix(A):
     U, S, Vt = np.linalg.svd(A)
     p = Vt[-1]
     P = p.reshape(3, 4)
-    return P[:, :3], P[:, 3:4]
+    return P
 
 
-def enforce_so3(R_tilde, t_tilde):
+def enforce_so3(Rt):
     """
     Enforce rotation matrix to lie on SO(3) (orthogonal with det=+1),
     and optionally normalize translation scale if t_tilde is given.
     """
+    R_tilde, t_tilde = Rt[:, :3], Rt[:, 3]
+
     U, S, Vt = np.linalg.svd(R_tilde)
     R = U @ Vt
     if np.linalg.det(R) < 0:
@@ -124,4 +145,5 @@ def enforce_so3(R_tilde, t_tilde):
 
     s = np.mean(S)
     t = t_tilde / s
-    return R, t
+    Rt = np.hstack([R, t.reshape(-1, 1)])
+    return Rt
